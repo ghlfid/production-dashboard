@@ -1,0 +1,383 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>자동차 부품 생산관리 대시보드</title>
+    <!-- TailwindCSS CDN -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- SheetJS (xlsx.js) CDN -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+    <!-- Chart.js CDN -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <!-- html2pdf.js CDN -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
+    <!-- FontAwesome CDN -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Pretendard:wght@300;400;500;600;700&display=swap');
+        body { font-family: 'Pretendard', sans-serif; }
+    </style>
+</head>
+<body class="bg-slate-50 text-slate-800 min-h-screen flex flex-col">
+
+    <!-- Header -->
+    <header class="bg-slate-900 text-white shadow-md">
+        <div class="max-w-7xl mx-auto px-4 py-4 flex flex-col sm:flex-row justify-between items-center gap-4">
+            <div class="flex items-center space-x-3">
+                <div class="bg-blue-600 p-2.5 rounded-lg text-white">
+                    <i class="fa-solid fa-industry text-xl"></i>
+                </div>
+                <div>
+                    <h1 class="text-xl font-bold tracking-tight">스마트 생산관리 대시보드</h1>
+                    <p class="text-xs text-slate-400">자동차 부품 제조 공정 실시간 모니터링</p>
+                </div>
+            </div>
+            <div class="flex items-center gap-3">
+                <button onclick="loadSampleData()" class="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-200 text-sm font-medium rounded-lg border border-slate-700 transition flex items-center gap-2">
+                    <i class="fa-solid fa-rotate-left"></i> 샘플 데이터 로드
+                </button>
+                <button onclick="exportToPDF()" class="px-4 py-2 bg-blue-600 hover:bg-blue-500 text-white text-sm font-medium rounded-lg shadow transition flex items-center gap-2">
+                    <i class="fa-solid fa-file-pdf"></i> PDF 리포트 다운로드
+                </button>
+            </div>
+        </div>
+    </header>
+
+    <!-- Main Container -->
+    <main class="max-w-7xl mx-auto px-4 py-6 flex-grow w-full space-y-6" id="dashboard-content">
+
+        <!-- Upload & Drop Zone -->
+        <div class="bg-white p-6 rounded-xl shadow-sm border border-slate-200">
+            <div id="drop-zone" class="border-2 border-dashed border-slate-300 hover:border-blue-500 rounded-xl p-6 text-center cursor-pointer transition bg-slate-50/50 hover:bg-blue-50/20 relative">
+                <input type="file" id="excel-file" accept=".xlsx, .xls, .csv" class="absolute inset-0 opacity-0 cursor-pointer w-full h-full" onchange="handleFileSelect(event)">
+                <div class="flex flex-col items-center justify-center space-y-2 pointer-events-none">
+                    <div class="w-12 h-12 rounded-full bg-blue-100 text-blue-600 flex items-center justify-center text-lg">
+                        <i class="fa-solid fa-cloud-arrow-up"></i>
+                    </div>
+                    <p class="text-sm font-semibold text-slate-700">엑셀 파일을 여기에 드래그하거나 클릭하여 업로드하세요</p>
+                    <p class="text-xs text-slate-400">지원 형식: .xlsx, .xls, .csv (일자, 계획량, 실적량, 불량률, 비가동시간 포함)</p>
+                </div>
+            </div>
+        </div>
+
+        <!-- KPI Cards -->
+        <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+            <!-- 계획량 -->
+            <div class="bg-white p-5 rounded-xl shadow-sm border border-slate-200 flex items-center justify-between">
+                <div>
+                    <p class="text-xs font-medium text-slate-500 uppercase tracking-wider">총 계획량 (Plan)</p>
+                    <h3 id="kpi-plan" class="text-2xl font-bold text-slate-900 mt-1">0</h3>
+                    <span class="text-xs text-slate-400 mt-1 inline-block">누적 생산 계획</span>
+                </div>
+                <div class="w-12 h-12 rounded-xl bg-indigo-50 text-indigo-600 flex items-center justify-center text-xl font-bold">
+                    <i class="fa-solid fa-list-check"></i>
+                </div>
+            </div>
+            <!-- 실적량 -->
+            <div class="bg-white p-5 rounded-xl shadow-sm border border-slate-200 flex items-center justify-between">
+                <div>
+                    <p class="text-xs font-medium text-slate-500 uppercase tracking-wider">총 실적량 (Actual)</p>
+                    <h3 id="kpi-actual" class="text-2xl font-bold text-slate-900 mt-1">0</h3>
+                    <span class="text-xs text-slate-400 mt-1 inline-block">누적 생산 실적</span>
+                </div>
+                <div class="w-12 h-12 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center text-xl font-bold">
+                    <i class="fa-solid fa-cubes"></i>
+                </div>
+            </div>
+            <!-- 달성률 -->
+            <div class="bg-white p-5 rounded-xl shadow-sm border border-slate-200">
+                <div class="flex items-center justify-between">
+                    <div>
+                        <p class="text-xs font-medium text-slate-500 uppercase tracking-wider">평균 달성률</p>
+                        <h3 id="kpi-achievement" class="text-2xl font-bold text-emerald-600 mt-1">0%</h3>
+                    </div>
+                    <div class="w-12 h-12 rounded-xl bg-emerald-50 text-emerald-600 flex items-center justify-center text-xl font-bold">
+                        <i class="fa-solid fa-chart-line"></i>
+                    </div>
+                </div>
+                <div class="w-full bg-slate-100 rounded-full h-1.5 mt-3">
+                    <div id="kpi-achievement-bar" class="bg-emerald-500 h-1.5 rounded-full transition-all duration-500" style="width: 0%"></div>
+                </div>
+            </div>
+            <!-- 불량률 -->
+            <div class="bg-white p-5 rounded-xl shadow-sm border border-slate-200">
+                <div class="flex items-center justify-between">
+                    <div>
+                        <p class="text-xs font-medium text-slate-500 uppercase tracking-wider">평균 불량률</p>
+                        <h3 id="kpi-defect" class="text-2xl font-bold text-rose-600 mt-1">0%</h3>
+                    </div>
+                    <div class="w-12 h-12 rounded-xl bg-rose-50 text-rose-600 flex items-center justify-center text-xl font-bold">
+                        <i class="fa-solid fa-triangle-exclamation"></i>
+                    </div>
+                </div>
+                <div class="w-full bg-slate-100 rounded-full h-1.5 mt-3">
+                    <div id="kpi-defect-bar" class="bg-rose-500 h-1.5 rounded-full transition-all duration-500" style="width: 0%"></div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Chart Section -->
+        <div class="bg-white p-6 rounded-xl shadow-sm border border-slate-200">
+            <div class="flex items-center justify-between mb-4">
+                <h2 class="text-base font-bold text-slate-900 flex items-center gap-2">
+                    <i class="fa-solid fa-chart-column text-blue-600"></i> 일자별 생산량 추이 (계획 vs 실적)
+                </h2>
+                <span class="text-xs text-slate-400">단위: 개</span>
+            </div>
+            <div class="relative h-80 w-full">
+                <canvas id="productionChart"></canvas>
+            </div>
+        </div>
+
+        <!-- Data Table Section -->
+        <div class="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
+            <div class="p-6 border-b border-slate-200 flex justify-between items-center">
+                <h2 class="text-base font-bold text-slate-900 flex items-center gap-2">
+                    <i class="fa-solid fa-table text-blue-600"></i> 생산 현황 상세 데이터
+                </h2>
+                <span id="row-count" class="text-xs bg-slate-100 text-slate-600 font-medium px-2.5 py-1 rounded-full">총 0건</span>
+            </div>
+            <div class="overflow-x-auto max-h-96">
+                <table class="w-full text-left border-collapse" id="data-table">
+                    <thead class="bg-slate-50 text-slate-600 uppercase text-xs font-semibold sticky top-0 border-b border-slate-200 z-10">
+                        <tr>
+                            <th class="px-6 py-3">일자</th>
+                            <th class="px-6 py-3">계획량</th>
+                            <th class="px-6 py-3">실적량</th>
+                            <th class="px-6 py-3">달성률</th>
+                            <th class="px-6 py-3">불량률</th>
+                            <th class="px-6 py-3">비가동시간(분)</th>
+                        </tr>
+                    </thead>
+                    <tbody class="divide-y divide-slate-100 text-sm text-slate-700 bg-white" id="table-body">
+                        <tr>
+                            <td colspan="6" class="px-6 py-10 text-center text-slate-400">
+                                <i class="fa-solid fa-folder-open text-3xl mb-2 block"></i>
+                                상단 영역에 엑셀 파일을 업로드하거나 '샘플 데이터 로드' 버튼을 클릭하세요.
+                            </td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+    </main>
+
+    <!-- Footer -->
+    <footer class="bg-white border-t border-slate-200 py-4 text-center text-xs text-slate-400 mt-auto">
+        &copy; 2026 자동차 부품 제조 공정 관리시스템. All rights reserved.
+    </footer>
+
+    <!-- JavaScript Logic -->
+    <script>
+        let productionChart = null;
+        let globalData = [];
+
+        // 초기 차트 렌더링
+        window.addEventListener('DOMContentLoaded', () => {
+            initChart([], [], []);
+            loadSampleData(); // 기본 샘플 데이터 자동 로드
+        });
+
+        // 샘플 데이터 (자동차 부품 제조 예시)
+        function loadSampleData() {
+            const sample = [
+                { 일자: '2026-09-01', 계획량: 1200, 실적량: 1150, 불량률: 1.2, 비가동시간: 45 },
+                { 일자: '2026-09-02', 계획량: 1200, 실적량: 1220, 불량률: 0.9, 비가동시간: 20 },
+                { 일자: '2026-09-03', 계획량: 1300, 실적량: 1250, 불량률: 1.5, 비가동시간: 60 },
+                { 일자: '2026-09-04', 계획량: 1300, 실적량: 1310, 불량률: 0.8, 비가동시간: 15 },
+                { 일자: '2026-09-05', 계획량: 1100, 실적량: 1050, 불량률: 2.1, 비가동시간: 90 },
+                { 일자: '2026-09-08', 계획량: 1250, 실적량: 1260, 불량률: 1.0, 비가동시간: 30 },
+                { 일자: '2026-09-09', 계획량: 1250, 실적량: 1200, 불량률: 1.3, 비가동시간: 50 },
+            ];
+            processDashboardData(sample);
+        }
+
+        // 파일 선택 핸들러
+        function handleFileSelect(event) {
+            const file = event.target.files[0];
+            if (!file) return;
+
+            const reader = new FileReader();
+            reader.onload = function(e) {
+                try {
+                    const data = new Uint8Array(e.target.result);
+                    const workbook = XLSX.read(data, { type: 'array' });
+                    const firstSheetName = workbook.SheetNames[0];
+                    const worksheet = workbook.Sheets[firstSheetName];
+                    const json = XLSX.utils.sheet_to_json(worksheet);
+
+                    if (json.length === 0) {
+                        alert('엑셀 파일에 데이터가 없습니다.');
+                        return;
+                    }
+                    processDashboardData(json);
+                } catch (error) {
+                    alert('엑셀 파일을 읽는 중 오류가 발생했습니다: ' + error.message);
+                }
+            };
+            reader.readAsArrayBuffer(file);
+        }
+
+        // 데이터 정규화 및 매핑 (컬럼명 유연성 확보)
+        function processDashboardData(rawRows) {
+            globalData = rawRows.map(row => {
+                // 키 이름 공백 제거 및 유연한 매칭
+                const keys = Object.keys(row);
+                const findVal = (keywords) => {
+                    for (let kw of keywords) {
+                        let foundKey = keys.find(k => k.replace(/\s+/g, '').includes(kw));
+                        if (foundKey !== undefined) return row[foundKey];
+                    }
+                    return 0;
+                };
+
+                return {
+                    일자: findVal(['일자', '날짜', 'date', 'DAY']) || '-',
+                    계획량: Number(findVal(['계획량', '목표', 'PLAN', 'plan'])) || 0,
+                    실적량: Number(findVal(['실적량', '생산량', 'ACTUAL', 'actual'])) || 0,
+                    불량률: Number(findVal(['불량률', '불량', 'DEFECT', 'defect'])) || 0,
+                    비가동시간: Number(findVal(['비가동', 'DOWNTIME', 'downtime', '정지'])) || 0
+                };
+            });
+
+            updateKPIs(globalData);
+            updateTable(globalData);
+            updateChart(globalData);
+        }
+
+        // KPI 계산 및 업데이트
+        function updateKPIs(data) {
+            let totalPlan = data.reduce((acc, cur) => acc + cur.계획량, 0);
+            let totalActual = data.reduce((acc, cur) => acc + cur.실적량, 0);
+            let avgAchievement = totalPlan > 0 ? ((totalActual / totalPlan) * 100).toFixed(1) : 0;
+            let avgDefect = data.length > 0 ? (data.reduce((acc, cur) => acc + cur.불량률, 0) / data.length).toFixed(2) : 0;
+
+            document.getElementById('kpi-plan').innerText = totalPlan.toLocaleString();
+            document.getElementById('kpi-actual').innerText = totalActual.toLocaleString();
+            
+            document.getElementById('kpi-achievement').innerText = avgAchievement + '%';
+            document.getElementById('kpi-achievement-bar').style.width = Math.min(avgAchievement, 100) + '%';
+            
+            document.getElementById('kpi-defect').innerText = avgDefect + '%';
+            document.getElementById('kpi-defect-bar').style.width = Math.min(avgDefect * 10, 100) + '%';
+        }
+
+        // 데이터 테이블 업데이트
+        function updateTable(data) {
+            const tbody = document.getElementById('table-body');
+            document.getElementById('row-count').innerText = `총 ${data.length}건`;
+            tbody.innerHTML = '';
+
+            if (data.length === 0) {
+                tbody.innerHTML = `<tr><td colspan="6" class="px-6 py-6 text-center text-slate-400">데이터가 없습니다.</td></tr>`;
+                return;
+            }
+
+            data.forEach(row => {
+                let achievement = row.계획량 > 0 ? ((row.실적량 / row.계획량) * 100).toFixed(1) : 0;
+                let tr = document.createElement('tr');
+                tr.className = 'hover:bg-slate-50 transition';
+                tr.innerHTML = `
+                    <td class="px-6 py-3.5 font-medium text-slate-800">${row.일자}</td>
+                    <td class="px-6 py-3.5">${row.계획량.toLocaleString()}</td>
+                    <td class="px-6 py-3.5 font-semibold text-blue-600">${row.실적량.toLocaleString()}</td>
+                    <td class="px-6 py-3.5">
+                        <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${achievement >= 100 ? 'bg-emerald-100 text-emerald-800' : 'bg-amber-100 text-amber-800'}">
+                            ${achievement}%
+                        </span>
+                    </td>
+                    <td class="px-6 py-3.5 text-rose-600 font-medium">${row.불량률}%</td>
+                    <td class="px-6 py-3.5 text-slate-600">${row.비가동시간}분</td>
+                `;
+                tbody.appendChild(tr);
+            });
+        }
+
+        // 차트 초기화 및 업데이트
+        function initChart(labels, plans, actuals) {
+            const ctx = document.getElementById('productionChart').getContext('2d');
+            productionChart = new Chart(ctx, {
+                type: 'bar',
+                data: {
+                    labels: labels,
+                    datasets: [
+                        {
+                            label: '계획량 (Plan)',
+                            data: plans,
+                            backgroundColor: '#94a3b8',
+                            borderRadius: 4,
+                        },
+                        {
+                            label: '실적량 (Actual)',
+                            data: actuals,
+                            backgroundColor: '#3b82f6',
+                            borderRadius: 4,
+                        }
+                    ]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: {
+                            position: 'top',
+                            align: 'end',
+                            labels: {
+                                boxWidth: 12,
+                                font: { family: 'Pretendard', size: 12 }
+                            }
+                        }
+                    },
+                    scales: {
+                        x: {
+                            grid: { display: false },
+                            ticks: { font: { family: 'Pretendard', size: 11 } }
+                        },
+                        y: {
+                            grid: { color: '#f1f5f9' },
+                            ticks: { font: { family: 'Pretendard', size: 11 } }
+                        }
+                    }
+                }
+            });
+        }
+
+        function updateChart(data) {
+            const labels = data.map(item => item.일자);
+            const plans = data.map(item => item.계획량);
+            const actuals = data.map(item => item.실적량);
+
+            productionChart.data.labels = labels;
+            productionChart.data.datasets[0].data = plans;
+            productionChart.data.datasets[1].data = actuals;
+            productionChart.update();
+        }
+
+        // PDF 다운로드 기능
+        function exportToPDF() {
+            const element = document.getElementById('dashboard-content');
+            const options = {
+                margin:       10,
+                filename:     '생산관리_대시보드_보고서.pdf',
+                image:        { type: 'jpeg', quality: 0.98 },
+                html2canvas:  { scale: 2, useCORS: true },
+                jsPDF:        { unit: 'mm', format: 'a4', orientation: 'landscape' }
+            };
+
+            // 다운로드 중 알림 효과
+            const btn = event.currentTarget;
+            const originalText = btn.innerHTML;
+            btn.innerHTML = `<i class="fa-solid fa-spinner fa-spin"></i> PDF 생성 중...`;
+            
+            html2pdf().from(element).set(options).save().then(() => {
+                btn.innerHTML = originalText;
+            }).catch(err => {
+                alert('PDF 출력 중 오류가 발생했습니다.');
+                btn.innerHTML = originalText;
+            });
+        }
+    </script>
+</body>
+</html>
